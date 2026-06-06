@@ -848,21 +848,34 @@ type filterEntry struct {
 type filterDB struct{ db *bbolt.DB }
 
 func openFilterDB(path string) (*filterDB, error) {
-	db, err := bbolt.Open(path, 0600, &bbolt.Options{Timeout: 2 * time.Second})
+	return openFilterDBMode(path, false)
+}
+
+func openFilterDBReadOnly(path string) (*filterDB, error) {
+	return openFilterDBMode(path, true)
+}
+
+func openFilterDBMode(path string, readOnly bool) (*filterDB, error) {
+	db, err := bbolt.Open(path, 0600, &bbolt.Options{
+		Timeout:  2 * time.Second,
+		ReadOnly: readOnly,
+	})
 	if err != nil {
 		return nil, err
 	}
-	err = db.Update(func(tx *bbolt.Tx) error {
-		for _, bkt := range [][]byte{bktFilters, bktHeaders, bktBlockHashes, bktHashToHeight, bktMeta} {
-			if _, err := tx.CreateBucketIfNotExists(bkt); err != nil {
-				return err
+	if !readOnly {
+		err = db.Update(func(tx *bbolt.Tx) error {
+			for _, bkt := range [][]byte{bktFilters, bktHeaders, bktBlockHashes, bktHashToHeight, bktMeta} {
+				if _, err := tx.CreateBucketIfNotExists(bkt); err != nil {
+					return err
+				}
 			}
+			return nil
+		})
+		if err != nil {
+			db.Close()
+			return nil, err
 		}
-		return nil
-	})
-	if err != nil {
-		db.Close()
-		return nil, err
 	}
 	return &filterDB{db: db}, nil
 }
@@ -1901,7 +1914,7 @@ func main() {
 		var db *filterDB
 		if *dbPath != "" {
 			var err error
-			db, err = openFilterDB(*dbPath)
+			db, err = openFilterDBReadOnly(*dbPath)
 			if err != nil {
 				log.Fatalf("open db %s: %v", *dbPath, err)
 			}
