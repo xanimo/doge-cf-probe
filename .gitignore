@@ -1,0 +1,4 @@
+logs/
+.ibd_state*
+doge-cf-probe
+/tmp/doge-recon-*
