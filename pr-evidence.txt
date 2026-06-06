@@ -1,0 +1,385 @@
+
+================================================================
+[2026-06-06 12:28:17] doge-cf-probe chain verification -- mainnet MODE=4
+================================================================
+[2026-06-06 12:28:17] probe dir  : /home/bluezr/source/repos/godoge
+[2026-06-06 12:28:17] log file   : /home/bluezr/source/repos/godoge/logs/ibd_mode4_20260606_122817.log
+[2026-06-06 12:28:17] state file : /home/bluezr/source/repos/godoge/.ibd_state_mode4
+[2026-06-06 12:28:17] binary     : /home/bluezr/source/repos/godoge/doge-cf-probe
+[2026-06-06 12:28:17] chunk size : 999
+[2026-06-06 12:28:17] node addr  : 127.0.0.1:22556
+[2026-06-06 12:28:17] mode       : 4 -- MODE=3 + neutrino (btcd/gcs) cross-check (every 1000 blocks)
+
+================================================================
+[2026-06-06 12:28:17] pre-flight checks
+================================================================
+[2026-06-06 12:28:17] node reachable...
+[2026-06-06 12:28:17]   tip = 6237922
+[2026-06-06 12:28:17] checking blockfilterindex...
+[2026-06-06 12:28:17]   blockfilterindex: active
+[2026-06-06 12:28:17] spot-checking filter at height 1...
+[2026-06-06 12:28:18]   height 1: ok -- filter=0187e260...
+
+================================================================
+[2026-06-06 12:28:18] building probe binary
+================================================================
+[2026-06-06 12:28:18] running: go build -o doge-cf-probe .
+[2026-06-06 12:28:19] build successful: /home/bluezr/source/repos/godoge/doge-cf-probe
+
+================================================================
+[2026-06-06 12:28:19] resolving start height
+================================================================
+[2026-06-06 12:28:19] starting from genesis (height 1)
+
+================================================================
+[2026-06-06 12:28:19] beginning chain walk -- heights 1 to 6237922
+================================================================
+[2026-06-06 12:28:19] total blocks to scan: 6237922
+[2026-06-06 12:28:19] estimated chunks    : ~6245
+
+[2026-06-06 12:28:19] chunk 1: heights 1-999 (999 blocks) | 0.00% | 0h00m00s | calculating...
+2026/06/06 12:28:19 verify mode ON
+2026/06/06 12:28:19 fetching stop hash for height 999...
+2026/06/06 12:28:19 stop hash (LE): 60ae9af806ea8b6de447c00790a632a5f691d39e3159e106b231fe6ffe242017
+2026/06/06 12:28:19 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 12:28:19 -> version sent
+2026/06/06 12:28:19 <- "version"
+2026/06/06 12:28:19 -> verack sent
+2026/06/06 12:28:19 <- "verack"
+2026/06/06 12:28:19 handshake complete
+2026/06/06 12:28:19 -- getcfheaders: heights 1-999
+2026/06/06 12:28:19   (skip: "sendheaders")
+2026/06/06 12:28:19   (skip: "sendcmpct")
+2026/06/06 12:28:19   (skip: "ping")
+2026/06/06 12:28:19   (skip: "addr")
+2026/06/06 12:28:19   (skip: "getheaders")
+2026/06/06 12:28:19   (skip: "feefilter")
+2026/06/06 12:28:19 <- cfheaders: filterType=0x00 stopHash=172024fe6ffe31b206e159319ed391f6a532a69007c047e46d8bea06f89aae60 prevHeader=3578adbf506c0f8807abb725f7756b8069777c296c2529cfff14a0ac519c9282 count=999
+2026/06/06 12:28:19 -- getcfilters: heights 1-999
+2026/06/06 12:28:19 -- processing 999 filters
+2026/06/06 12:28:19   [1] hash-chain=OK        filter-bytes=OK        fheader=OK      
+[2026-06-06 12:34:37]   [recon/500000] block 92ae1083b7b3c22fd7b4ce2eae121d518f8e1aa81d0be9432ce5aa20a2954fcc -- 26 unique scriptPubKeys
+2026/06/06 12:34:37 matchfile: loaded 26 scriptPubKeys from /tmp/doge-recon-6FGT3h.spk
+2026/06/06 12:34:37 matching 26 target(s) against each filter
+2026/06/06 12:34:37 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 12:34:37 verify mode ON
+2026/06/06 12:34:37 fetching stop hash for height 500000...
+2026/06/06 12:34:37 matchfile: loaded 26 scriptPubKeys from /tmp/doge-recon-6FGT3h.spk
+2026/06/06 12:34:37 matching 26 target(s) against each filter
+2026/06/06 12:34:37 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 12:34:37 verify mode ON
+2026/06/06 12:34:37 fetching stop hash for height 500000...
+2026/06/06 12:34:37 stop hash (LE): cc4f95a220aae52c43e90b1da81a8e8f511d12ae2eceb4d72fc2b3b78310ae92
+2026/06/06 12:34:37 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 12:34:37 stop hash (LE): cc4f95a220aae52c43e90b1da81a8e8f511d12ae2eceb4d72fc2b3b78310ae92
+2026/06/06 12:34:37 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 12:34:37 -> version sent
+2026/06/06 12:34:37 -> version sent
+2026/06/06 12:34:37 <- "version"
+2026/06/06 12:34:37 <- "version"
+2026/06/06 12:34:37 -> verack sent
+2026/06/06 12:34:37 -> verack sent
+--
+[2026-06-06 12:34:37]   [recon/500000] PASS -- all scriptPubKeys confirmed in filter
+[2026-06-06 12:34:37] chunk 502: heights 500500-501498 (999 blocks) | 8.02% | 0h06m18s | 1324 blocks/s
+2026/06/06 12:34:37 verify mode ON
+2026/06/06 12:34:37 fetching stop hash for height 501498...
+2026/06/06 12:34:37 stop hash (LE): 9f111d5c5e1607943278a3227333da985a381546f809353e310d74301239b84a
+2026/06/06 12:34:37 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 12:34:37 -> version sent
+2026/06/06 12:34:37 <- "version"
+2026/06/06 12:34:37 -> verack sent
+2026/06/06 12:34:37 <- "verack"
+2026/06/06 12:34:37 handshake complete
+2026/06/06 12:34:37 -- getcfheaders: heights 500500-501498
+2026/06/06 12:34:37   (skip: "sendheaders")
+2026/06/06 12:34:37   (skip: "sendcmpct")
+2026/06/06 12:34:37   (skip: "ping")
+2026/06/06 12:34:37   (skip: "addr")
+2026/06/06 12:34:37   (skip: "getheaders")
+2026/06/06 12:34:37   (skip: "feefilter")
+2026/06/06 12:34:37 <- cfheaders: filterType=0x00 stopHash=4ab8391230740d313e3509f84615385a98da337322a378329407165e5c1d119f prevHeader=9129128b08ef3359f1d28ab2c061c80ace563bbda55936f16027dabf5b002f1d count=999
+2026/06/06 12:34:37 -- getcfilters: heights 500500-501498
+2026/06/06 12:34:37 -- processing 999 filters
+--
+[2026-06-06 12:41:42]   [recon/1000000] block 6aae55bea74235f0c80bd066349d4440c31f2d0f27d54265ecd484d8c1d11b47 -- 35 unique scriptPubKeys
+2026/06/06 12:41:42 matchfile: loaded 35 scriptPubKeys from /tmp/doge-recon-Mq1YhY.spk
+2026/06/06 12:41:42 matching 35 target(s) against each filter
+2026/06/06 12:41:42 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 12:41:42 verify mode ON
+2026/06/06 12:41:42 fetching stop hash for height 1000000...
+2026/06/06 12:41:42 matchfile: loaded 35 scriptPubKeys from /tmp/doge-recon-Mq1YhY.spk
+2026/06/06 12:41:42 matching 35 target(s) against each filter
+2026/06/06 12:41:42 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 12:41:42 verify mode ON
+2026/06/06 12:41:42 fetching stop hash for height 1000000...
+2026/06/06 12:41:42 stop hash (LE): 471bd1c1d884d4ec6542d5270f2d1fc340449d3466d00bc8f03542a7be55ae6a
+2026/06/06 12:41:42 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 12:41:42 stop hash (LE): 471bd1c1d884d4ec6542d5270f2d1fc340449d3466d00bc8f03542a7be55ae6a
+2026/06/06 12:41:42 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 12:41:42 -> version sent
+2026/06/06 12:41:42 -> version sent
+2026/06/06 12:41:42 <- "version"
+2026/06/06 12:41:42 <- "version"
+2026/06/06 12:41:42 -> verack sent
+2026/06/06 12:41:42 -> verack sent
+--
+[2026-06-06 12:41:42]   [recon/1000000] PASS -- all scriptPubKeys confirmed in filter
+[2026-06-06 12:41:42] chunk 1003: heights 1000999-1001997 (999 blocks) | 16.05% | 0h13m23s | 1247 blocks/s
+2026/06/06 12:41:42 verify mode ON
+2026/06/06 12:41:42 fetching stop hash for height 1001997...
+2026/06/06 12:41:42 stop hash (LE): e041c193626aaa20bba15081032b36d883ad6bc79c822bcfe3e92a507da0ef26
+2026/06/06 12:41:42 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 12:41:42 -> version sent
+2026/06/06 12:41:42 <- "version"
+2026/06/06 12:41:42 -> verack sent
+2026/06/06 12:41:42 <- "verack"
+2026/06/06 12:41:42 handshake complete
+2026/06/06 12:41:42 -- getcfheaders: heights 1000999-1001997
+2026/06/06 12:41:42   (skip: "sendheaders")
+2026/06/06 12:41:42   (skip: "sendcmpct")
+2026/06/06 12:41:42   (skip: "ping")
+2026/06/06 12:41:42   (skip: "addr")
+2026/06/06 12:41:42   (skip: "getheaders")
+2026/06/06 12:41:42   (skip: "feefilter")
+2026/06/06 12:41:42 <- cfheaders: filterType=0x00 stopHash=26efa07d502ae9e3cf2b829cc76bad83d8362b038150a1bb20aa6a6293c141e0 prevHeader=4212a8e07ee3477339bce34287d91fa331b296f9bb43a26e9a49d11bed7b664a count=999
+2026/06/06 12:41:42 -- getcfilters: heights 1000999-1001997
+2026/06/06 12:41:42 -- processing 999 filters
+--
+[2026-06-06 12:55:54]   [recon/2000000] block 9914f0e82e39bbf21950792e8816620d71b9965bdbbc14e72a95e3ab9618fea8 -- 104 unique scriptPubKeys
+2026/06/06 12:55:54 matchfile: loaded 104 scriptPubKeys from /tmp/doge-recon-hHFNzk.spk
+2026/06/06 12:55:54 matching 104 target(s) against each filter
+2026/06/06 12:55:54 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 12:55:54 verify mode ON
+2026/06/06 12:55:54 fetching stop hash for height 2000000...
+2026/06/06 12:55:54 matchfile: loaded 104 scriptPubKeys from /tmp/doge-recon-hHFNzk.spk
+2026/06/06 12:55:54 matching 104 target(s) against each filter
+2026/06/06 12:55:54 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 12:55:54 verify mode ON
+2026/06/06 12:55:54 fetching stop hash for height 2000000...
+2026/06/06 12:55:54 stop hash (LE): a8fe1896abe3952ae714bcdb5b96b9710d6216882e795019f2bb392ee8f01499
+2026/06/06 12:55:54 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 12:55:54 stop hash (LE): a8fe1896abe3952ae714bcdb5b96b9710d6216882e795019f2bb392ee8f01499
+2026/06/06 12:55:54 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 12:55:54 -> version sent
+2026/06/06 12:55:54 -> version sent
+2026/06/06 12:55:54 <- "version"
+2026/06/06 12:55:54 <- "version"
+2026/06/06 12:55:54 -> verack sent
+2026/06/06 12:55:54 <- "verack"
+--
+[2026-06-06 12:55:54]   [recon/2000000] PASS -- all scriptPubKeys confirmed in filter
+[2026-06-06 12:55:54] chunk 2004: heights 2000998-2001996 (999 blocks) | 32.08% | 0h27m35s | 1209 blocks/s
+2026/06/06 12:55:54 verify mode ON
+2026/06/06 12:55:54 fetching stop hash for height 2001996...
+2026/06/06 12:55:54 stop hash (LE): c54c86fb8bbe6236be8a16e684f535407e936c371fc026de3f1f35ec22f350d5
+2026/06/06 12:55:54 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 12:55:54 -> version sent
+2026/06/06 12:55:54 <- "version"
+2026/06/06 12:55:54 -> verack sent
+2026/06/06 12:55:54 <- "verack"
+2026/06/06 12:55:54 handshake complete
+2026/06/06 12:55:54 -- getcfheaders: heights 2000998-2001996
+2026/06/06 12:55:54   (skip: "sendheaders")
+2026/06/06 12:55:54   (skip: "sendcmpct")
+2026/06/06 12:55:54   (skip: "ping")
+2026/06/06 12:55:54   (skip: "addr")
+2026/06/06 12:55:54   (skip: "getheaders")
+2026/06/06 12:55:54   (skip: "feefilter")
+2026/06/06 12:55:54 <- cfheaders: filterType=0x00 stopHash=d550f322ec351f3fde26c01f376c937e4035f584e6168abe3662be8bfb864cc5 prevHeader=0edf1a8e4e63e55fdf0c37a1876c1e11dec0ca87e1684bcf56ca4a11bad90e2b count=999
+2026/06/06 12:55:54 -- getcfilters: heights 2000998-2001996
+2026/06/06 12:55:54 -- processing 999 filters
+--
+[2026-06-06 13:10:46]   [recon/3000000] block 195a83b091fb3ee7ecb56f2e63d01709293f57f971ccf373d93890c8dc1033db -- 18 unique scriptPubKeys
+2026/06/06 13:10:46 matchfile: loaded 18 scriptPubKeys from /tmp/doge-recon-53riH3.spk
+2026/06/06 13:10:46 matching 18 target(s) against each filter
+2026/06/06 13:10:46 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 13:10:46 verify mode ON
+2026/06/06 13:10:46 fetching stop hash for height 3000000...
+2026/06/06 13:10:46 matchfile: loaded 18 scriptPubKeys from /tmp/doge-recon-53riH3.spk
+2026/06/06 13:10:46 matching 18 target(s) against each filter
+2026/06/06 13:10:46 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 13:10:46 verify mode ON
+2026/06/06 13:10:46 fetching stop hash for height 3000000...
+2026/06/06 13:10:46 stop hash (LE): db3310dcc89038d973f3cc71f9573f290917d0632e6fb5ece73efb91b0835a19
+2026/06/06 13:10:46 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 13:10:46 stop hash (LE): db3310dcc89038d973f3cc71f9573f290917d0632e6fb5ece73efb91b0835a19
+2026/06/06 13:10:46 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 13:10:46 -> version sent
+2026/06/06 13:10:46 -> version sent
+2026/06/06 13:10:46 <- "version"
+2026/06/06 13:10:46 -> verack sent
+2026/06/06 13:10:46 <- "version"
+2026/06/06 13:10:46 -> verack sent
+--
+[2026-06-06 13:10:46]   [recon/3000000] PASS -- all scriptPubKeys confirmed in filter
+[2026-06-06 13:10:46] chunk 3005: heights 3000997-3001995 (999 blocks) | 48.11% | 0h42m27s | 1178 blocks/s
+2026/06/06 13:10:46 verify mode ON
+2026/06/06 13:10:46 fetching stop hash for height 3001995...
+2026/06/06 13:10:46 stop hash (LE): 929e59af92a8972a32d08a5737766f08d99293c00de12db116e24c301947286d
+2026/06/06 13:10:46 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 13:10:46 -> version sent
+2026/06/06 13:10:46 <- "version"
+2026/06/06 13:10:46 -> verack sent
+2026/06/06 13:10:46 <- "verack"
+2026/06/06 13:10:46 handshake complete
+2026/06/06 13:10:46 -- getcfheaders: heights 3000997-3001995
+2026/06/06 13:10:46   (skip: "sendheaders")
+2026/06/06 13:10:46   (skip: "sendcmpct")
+2026/06/06 13:10:46   (skip: "ping")
+2026/06/06 13:10:46   (skip: "addr")
+2026/06/06 13:10:46   (skip: "getheaders")
+2026/06/06 13:10:46   (skip: "feefilter")
+2026/06/06 13:10:46 <- cfheaders: filterType=0x00 stopHash=6d284719304ce216b12de10dc09392d9086f7637578ad0322a97a892af599e92 prevHeader=8a9f0c19dec588294bb4b803f6489b36e33dcc78e4877d6cd0e0066426b4fdf3 count=999
+2026/06/06 13:10:46 -- getcfilters: heights 3000997-3001995
+2026/06/06 13:10:46 -- processing 999 filters
+--
+[2026-06-06 13:25:33]   [recon/4000000] block 47f227cd54c270aa18c5136635fc003a11cb82d6f8319dd8dab180a2f5555a9e -- 133 unique scriptPubKeys
+2026/06/06 13:25:33 matchfile: loaded 133 scriptPubKeys from /tmp/doge-recon-YO8RPy.spk
+2026/06/06 13:25:33 matching 133 target(s) against each filter
+2026/06/06 13:25:33 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 13:25:33 verify mode ON
+2026/06/06 13:25:33 fetching stop hash for height 4000000...
+2026/06/06 13:25:33 matchfile: loaded 133 scriptPubKeys from /tmp/doge-recon-YO8RPy.spk
+2026/06/06 13:25:33 matching 133 target(s) against each filter
+2026/06/06 13:25:33 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 13:25:33 verify mode ON
+2026/06/06 13:25:33 fetching stop hash for height 4000000...
+2026/06/06 13:25:33 stop hash (LE): 9e5a55f5a280b1dad89d31f8d682cb113a00fc356613c518aa70c254cd27f247
+2026/06/06 13:25:33 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 13:25:33 stop hash (LE): 9e5a55f5a280b1dad89d31f8d682cb113a00fc356613c518aa70c254cd27f247
+2026/06/06 13:25:33 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 13:25:33 -> version sent
+2026/06/06 13:25:33 -> version sent
+2026/06/06 13:25:33 <- "version"
+2026/06/06 13:25:33 <- "version"
+2026/06/06 13:25:33 -> verack sent
+2026/06/06 13:25:33 -> verack sent
+--
+[2026-06-06 13:25:33]   [recon/4000000] PASS -- all scriptPubKeys confirmed in filter
+[2026-06-06 13:25:33] chunk 4006: heights 4000996-4001994 (999 blocks) | 64.14% | 0h57m14s | 1165 blocks/s
+2026/06/06 13:25:33 verify mode ON
+2026/06/06 13:25:33 fetching stop hash for height 4001994...
+2026/06/06 13:25:33 stop hash (LE): 8279b79d8ce5dce905143352e8685728440c006bf06a1858976953f5a5728491
+2026/06/06 13:25:33 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 13:25:33 -> version sent
+2026/06/06 13:25:33 <- "version"
+2026/06/06 13:25:33 -> verack sent
+2026/06/06 13:25:33 <- "verack"
+2026/06/06 13:25:33 handshake complete
+2026/06/06 13:25:33 -- getcfheaders: heights 4000996-4001994
+2026/06/06 13:25:33   (skip: "sendheaders")
+2026/06/06 13:25:33   (skip: "sendcmpct")
+2026/06/06 13:25:33   (skip: "ping")
+2026/06/06 13:25:33   (skip: "addr")
+2026/06/06 13:25:33   (skip: "getheaders")
+2026/06/06 13:25:33   (skip: "feefilter")
+2026/06/06 13:25:33 <- cfheaders: filterType=0x00 stopHash=918472a5f553699758186af06b000c44285768e852331405e9dce58c9db77982 prevHeader=cfe56665f2d8461f4708afc8d94a4c523c7a7ad0177b0b858d13bfff8aa2ffe4 count=999
+2026/06/06 13:25:33 -- getcfilters: heights 4000996-4001994
+2026/06/06 13:25:33 -- processing 999 filters
+--
+[2026-06-06 13:43:17]   [recon/5000000] block 5ae6eadfe5fd98fa7f388b671c4863db4b62e46eecc054465a276d419500e469 -- 452 unique scriptPubKeys
+2026/06/06 13:43:17 matchfile: loaded 452 scriptPubKeys from /tmp/doge-recon-WrYdSp.spk
+2026/06/06 13:43:17 matching 452 target(s) against each filter
+2026/06/06 13:43:17 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 13:43:17 verify mode ON
+2026/06/06 13:43:17 fetching stop hash for height 5000000...
+2026/06/06 13:43:17 matchfile: loaded 452 scriptPubKeys from /tmp/doge-recon-WrYdSp.spk
+2026/06/06 13:43:17 matching 452 target(s) against each filter
+2026/06/06 13:43:17 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 13:43:17 verify mode ON
+2026/06/06 13:43:17 fetching stop hash for height 5000000...
+2026/06/06 13:43:17 stop hash (LE): 69e40095416d275a4654c0ec6ee4624bdb63481c678b387ffa98fde5dfeae65a
+2026/06/06 13:43:17 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 13:43:17 stop hash (LE): 69e40095416d275a4654c0ec6ee4624bdb63481c678b387ffa98fde5dfeae65a
+2026/06/06 13:43:17 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 13:43:17 -> version sent
+2026/06/06 13:43:17 -> version sent
+2026/06/06 13:43:17 <- "version"
+2026/06/06 13:43:17 <- "version"
+2026/06/06 13:43:17 -> verack sent
+2026/06/06 13:43:17 <- "verack"
+--
+[2026-06-06 13:43:18]   [recon/5000000] PASS -- all scriptPubKeys confirmed in filter
+[2026-06-06 13:43:18] chunk 5007: heights 5000995-5001993 (999 blocks) | 80.17% | 1h14m59s | 1112 blocks/s
+2026/06/06 13:43:18 verify mode ON
+2026/06/06 13:43:18 fetching stop hash for height 5001993...
+2026/06/06 13:43:18 stop hash (LE): e13fb041a5f28992221631c18983c92e119b5201204d6dfbedc07fb3c6a32f0d
+2026/06/06 13:43:18 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 13:43:18 -> version sent
+2026/06/06 13:43:18 <- "version"
+2026/06/06 13:43:18 -> verack sent
+2026/06/06 13:43:18 <- "verack"
+2026/06/06 13:43:18 handshake complete
+2026/06/06 13:43:18 -- getcfheaders: heights 5000995-5001993
+2026/06/06 13:43:18   (skip: "sendheaders")
+2026/06/06 13:43:18   (skip: "sendcmpct")
+2026/06/06 13:43:18   (skip: "ping")
+2026/06/06 13:43:18   (skip: "addr")
+2026/06/06 13:43:18   (skip: "getheaders")
+2026/06/06 13:43:18   (skip: "feefilter")
+2026/06/06 13:43:18 <- cfheaders: filterType=0x00 stopHash=0d2fa3c6b37fc0edfb6d4d2001529b112ec98389c13116229289f2a541b03fe1 prevHeader=6ab5b65dba0d5f0b98ba0098096e5ca9776b29f5a9290f71dd6d335880050dc7 count=999
+2026/06/06 13:43:18 -- getcfilters: heights 5000995-5001993
+2026/06/06 13:43:18 -- processing 999 filters
+--
+[2026-06-06 14:10:37]   [recon/6238000] block 5b6980d55e1e7f7640d419d7459a5e95504bb813fac5350d2bc7dd58fe6db680 -- 3 unique scriptPubKeys
+2026/06/06 14:10:37 matchfile: loaded 3 scriptPubKeys from /tmp/doge-recon-N7DsZh.spk
+2026/06/06 14:10:37 matching 3 target(s) against each filter
+2026/06/06 14:10:37 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 14:10:37 verify mode ON
+2026/06/06 14:10:37 fetching stop hash for height 6238000...
+2026/06/06 14:10:37 matchfile: loaded 3 scriptPubKeys from /tmp/doge-recon-N7DsZh.spk
+2026/06/06 14:10:37 matching 3 target(s) against each filter
+2026/06/06 14:10:37 matchblock ON -- hit blocks will be fetched and confirmed via RPC
+2026/06/06 14:10:37 verify mode ON
+2026/06/06 14:10:37 fetching stop hash for height 6238000...
+2026/06/06 14:10:37 stop hash (LE): 80b66dfe58ddc72b0d35c5fa13b84b50955e9a45d719d440767f1e5ed580695b
+2026/06/06 14:10:37 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 14:10:37 stop hash (LE): 80b66dfe58ddc72b0d35c5fa13b84b50955e9a45d719d440767f1e5ed580695b
+2026/06/06 14:10:37 connecting to 127.0.0.1:22556 (mainnet)
+2026/06/06 14:10:37 -> version sent
+2026/06/06 14:10:37 -> version sent
+2026/06/06 14:10:37 <- "version"
+2026/06/06 14:10:37 <- "version"
+2026/06/06 14:10:37 -> verack sent
+2026/06/06 14:10:37 -> verack sent
+--
+[2026-06-06 14:10:37]   [recon/6238000] PASS -- all scriptPubKeys confirmed in filter
+
+================================================================
+[2026-06-06 14:10:37] chain walk complete
+================================================================
+[2026-06-06 14:10:37] mode             : 4
+[2026-06-06 14:10:37] chunks completed : 6245
+[2026-06-06 14:10:37] blocks scanned   : 6238016
+[2026-06-06 14:10:37] failed chunks    : 0
+[2026-06-06 14:10:37] elapsed          : 1h42m18s
+[2026-06-06 14:10:37] rate             : 1016 blocks/s
+[2026-06-06 14:10:37] final tip        : 6238016
+[2026-06-06 14:10:37] log file         : /home/bluezr/source/repos/godoge/logs/ibd_mode4_20260606_122817.log
+[2026-06-06 14:10:37] state file cleared -- re-run will start from genesis
+2026/06/06 14:10:37 -- matchblock: fetching hit blocks for confirmation ---------------
+2026/06/06 14:10:37   [6238000] block 5b6980d55e1e7f7640d419d7459a5e95504bb813fac5350d2bc7dd58fe6db680 — 2 tx
+2026/06/06 14:10:37     CONFIRMED tx=4761070d0208abd1947fe51b4fcb45ba1730248a68f2052d8307db727c07188e vout=0 value=10000.52200000 type=pubkey spk=21021591357e480951376b0fe1c46265d64d828e0efc630ebb670a3e36490f570868ac
+2026/06/06 14:10:37     CONFIRMED tx=dd2b56685a3620293efff414a22625493847521f21bced6750fe074cff3273bc vout=0 value=2101.40973869 type=pubkeyhash spk=76a914c892b7e6df6acc9862aa7a68d19ed09fb90b142688ac
+2026/06/06 14:10:37     CONFIRMED tx=dd2b56685a3620293efff414a22625493847521f21bced6750fe074cff3273bc vout=1 value=126.00000000 type=pubkeyhash spk=76a914b6ff36e41a10a8c4ffe01b237fe68b64e945343388ac
+2026/06/06 14:10:37 OK
+2026/06/06 14:10:37   [6238000] block 5b6980d55e1e7f7640d419d7459a5e95504bb813fac5350d2bc7dd58fe6db680 — 2 tx
+2026/06/06 14:10:37     CONFIRMED tx=4761070d0208abd1947fe51b4fcb45ba1730248a68f2052d8307db727c07188e vout=0 value=10000.52200000 type=pubkey spk=21021591357e480951376b0fe1c46265d64d828e0efc630ebb670a3e36490f570868ac
+2026/06/06 14:10:37     CONFIRMED tx=dd2b56685a3620293efff414a22625493847521f21bced6750fe074cff3273bc vout=0 value=2101.40973869 type=pubkeyhash spk=76a914c892b7e6df6acc9862aa7a68d19ed09fb90b142688ac
+2026/06/06 14:10:37     CONFIRMED tx=dd2b56685a3620293efff414a22625493847521f21bced6750fe074cff3273bc vout=1 value=126.00000000 type=pubkeyhash spk=76a914b6ff36e41a10a8c4ffe01b237fe68b64e945343388ac
+2026/06/06 14:10:37 OK
+[2026-06-06 14:10:37]   [recon/6238000] PASS -- all scriptPubKeys confirmed in filter
+
+================================================================
+[2026-06-06 14:10:37] chain walk complete
+================================================================
+[2026-06-06 14:10:37] mode             : 4
+[2026-06-06 14:10:37] chunks completed : 6245
+[2026-06-06 14:10:37] blocks scanned   : 6238016
+[2026-06-06 14:10:37] failed chunks    : 0
+[2026-06-06 14:10:37] elapsed          : 1h42m18s
+[2026-06-06 14:10:37] rate             : 1016 blocks/s
+[2026-06-06 14:10:37] final tip        : 6238016
+[2026-06-06 14:10:37] log file         : /home/bluezr/source/repos/godoge/logs/ibd_mode4_20260606_122817.log
+[2026-06-06 14:10:37] state file cleared -- re-run will start from genesis
