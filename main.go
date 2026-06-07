@@ -53,6 +53,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"context"
 	"sort"
 	"strings"
 	"sync"
@@ -1275,13 +1276,37 @@ func (r verifyResult) print() {
 	}
 }
 
-// -- P2P index builder --------------------------------------------------------
+// -- P2P index builder (parallel) ---------------------------------------------
 //
-// fetchAndStoreBatch fetches one batch (up to 999 blocks) of filter headers
-// and filters from the upstream node via P2P, verifies the hash chain, and
-// writes all entries to the local database in a single transaction.
+// Three-stage pipeline:
+//   1. Job generator  — emits (idx, from, count, stopHash) for each 999-block batch.
+//   2. Worker pool    — N goroutines each open a P2P connection, fetch cfheaders +
+//                       cfilters, verify the hash chain, and emit raw block data.
+//   3. Ordered committer — receives results out-of-order, buffers them, flushes
+//                       consecutive batches in index order, derives filter headers
+//                       (which are sequentially dependent), and writes to db.
 
-func fetchAndStoreBatch(db *filterDB, peerAddr string, magic [4]byte, from, count int, stopHash []byte) error {
+type batchJob struct {
+	idx      int
+	from     int
+	count    int
+	stopHash []byte
+}
+
+type fetchedBlock struct {
+	blockHashLE []byte
+	filterBytes []byte
+}
+
+type batchFetch struct {
+	job      batchJob
+	prevFHdr []byte // filter header of block (from-1), from cfheaders response
+	blocks   []fetchedBlock
+	err      error
+}
+
+// doFetchBatch performs one P2P round-trip for a single batch.
+func doFetchBatch(peerAddr string, magic [4]byte, job batchJob, out *batchFetch) error {
 	conn, err := net.DialTimeout("tcp", peerAddr, 10*time.Second)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -1292,8 +1317,7 @@ func fetchAndStoreBatch(db *filterDB, peerAddr string, magic [4]byte, from, coun
 		return fmt.Errorf("handshake: %w", err)
 	}
 
-	// getcfheaders
-	if _, err := conn.Write(buildMsg(magic, cmdGetCFHdrs, buildGetCFHeaders(uint32(from), stopHash))); err != nil {
+	if _, err := conn.Write(buildMsg(magic, cmdGetCFHdrs, buildGetCFHeaders(uint32(job.from), job.stopHash))); err != nil {
 		return fmt.Errorf("send getcfheaders: %w", err)
 	}
 	var filterHashes [][]byte
@@ -1301,79 +1325,74 @@ func fetchAndStoreBatch(db *filterDB, peerAddr string, magic [4]byte, from, coun
 	for {
 		cmd, payload, err := readMsg(conn, magic)
 		if err != nil {
-			return fmt.Errorf("read cfheaders: %w", err)
+			return fmt.Errorf("cfheaders: %w", err)
 		}
 		if cmd != cmdCFHdrs {
 			continue
 		}
-		_, _, prevH, hashes, err := parseCFHeaders(payload)
+		_, _, ph, hashes, err := parseCFHeaders(payload)
 		if err != nil {
-			return fmt.Errorf("parse cfheaders: %w", err)
+			return err
 		}
-		filterHashes = hashes
-		prevFHdr = prevH
+		filterHashes, prevFHdr = hashes, ph
 		break
 	}
-	if len(filterHashes) != count {
-		return fmt.Errorf("expected %d hashes, got %d", count, len(filterHashes))
+	if len(filterHashes) != job.count {
+		return fmt.Errorf("cfheaders: got %d hashes, want %d", len(filterHashes), job.count)
 	}
 
-	// Verify prevFHdr is consistent with what we already have stored.
-	if from == 0 {
-		for _, b := range prevFHdr {
-			if b != 0 {
-				return fmt.Errorf("genesis prevFHdr not all-zeros")
-			}
-		}
-	} else if stored := db.getFilterHeader(from - 1); stored != nil && !bytes.Equal(stored, prevFHdr) {
-		return fmt.Errorf("filter header chain break at height %d", from-1)
-	}
-
-	// Derive filter headers for this batch.
-	derivedHeaders := make([][]byte, count)
-	prev := prevFHdr
-	for i, fh := range filterHashes {
-		dh := deriveFilterHeader(fh, prev)
-		derivedHeaders[i] = dh
-		prev = dh
-	}
-
-	// getcfilters
-	if _, err := conn.Write(buildMsg(magic, cmdGetCFilts, buildGetCFilters(uint32(from), stopHash))); err != nil {
+	if _, err := conn.Write(buildMsg(magic, cmdGetCFilts, buildGetCFilters(uint32(job.from), job.stopHash))); err != nil {
 		return fmt.Errorf("send getcfilters: %w", err)
 	}
-	entries := make([]filterEntry, count)
+	blocks := make([]fetchedBlock, job.count)
 	received := 0
-	for received < count {
+	for received < job.count {
 		cmd, payload, err := readMsg(conn, magic)
 		if err != nil {
-			return fmt.Errorf("read cfilter[%d]: %w", received, err)
+			return fmt.Errorf("cfilter[%d]: %w", received, err)
 		}
 		if cmd != cmdCFilter {
 			continue
 		}
 		_, blockHashLE, filterBytes, err := parseCFilter(payload)
 		if err != nil {
-			return fmt.Errorf("parse cfilter[%d]: %w", received, err)
+			return err
 		}
-		computed := filterHashFromBytes(filterBytes)
-		if !bytes.Equal(computed, filterHashes[received]) {
-			return fmt.Errorf("filter hash mismatch at height %d", from+received)
+		if !bytes.Equal(filterHashFromBytes(filterBytes), filterHashes[received]) {
+			return fmt.Errorf("hash mismatch at height %d", job.from+received)
 		}
-		entries[received] = filterEntry{
-			height:       from + received,
-			blockHashLE:  append([]byte(nil), blockHashLE...),
-			filterBytes:  append([]byte(nil), filterBytes...),
-			filterHeader: derivedHeaders[received],
+		blocks[received] = fetchedBlock{
+			blockHashLE: append([]byte(nil), blockHashLE...),
+			filterBytes: append([]byte(nil), filterBytes...),
 		}
 		received++
 	}
-	return db.putBatch(entries)
+	out.prevFHdr = prevFHdr
+	out.blocks = blocks
+	return nil
 }
 
-// buildIndex syncs the local filter database from the node via P2P up to the
-// current chain tip.  It is resumable: it picks up from db.tip()+1 on each call.
-func buildIndex(db *filterDB, rpc *rpcClient, peerAddr string, magic [4]byte) error {
+// fetchOneBatch retries doFetchBatch up to 3 times with backoff.
+func fetchOneBatch(peerAddr string, magic [4]byte, job batchJob) batchFetch {
+	out := batchFetch{job: job}
+	for attempt := 1; attempt <= 3; attempt++ {
+		if err := doFetchBatch(peerAddr, magic, job, &out); err == nil {
+			return out
+		} else {
+			log.Printf("index: batch %d-%d attempt %d/3: %v",
+				job.from, job.from+job.count-1, attempt, err)
+			out.err = err
+			if attempt < 3 {
+				time.Sleep(5 * time.Second)
+			}
+		}
+	}
+	return out
+}
+
+// buildIndex syncs the local filter database from db.tip()+1 to the current
+// chain tip using numWorkers parallel P2P connections.  Resumable on restart.
+func buildIndex(db *filterDB, rpc *rpcClient, peerAddr string, magic [4]byte, numWorkers int) error {
 	chainTip, err := rpc.getBlockCount()
 	if err != nil {
 		return fmt.Errorf("getblockcount: %w", err)
@@ -1383,40 +1402,134 @@ func buildIndex(db *filterDB, rpc *rpcClient, peerAddr string, magic [4]byte) er
 		log.Printf("index: already at chain tip (%d)", chainTip)
 		return nil
 	}
-	log.Printf("index: syncing heights %d → %d (%d blocks)", from, chainTip, chainTip-from+1)
+	totalBatches := (chainTip-from)/1000 + 1
+	log.Printf("index: syncing %d → %d (%d blocks, %d batches, %d workers)",
+		from, chainTip, chainTip-from+1, totalBatches, numWorkers)
 
-	for from <= chainTip {
-		batchEnd := from + 999
-		if batchEnd > chainTip {
-			batchEnd = chainTip
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	jobCh := make(chan batchJob, numWorkers*2)
+	resultCh := make(chan batchFetch, numWorkers*2)
+
+	// Stage 1: job generator — emits one job per 999-block batch.
+	go func() {
+		defer close(jobCh)
+		idx := 0
+		for h := from; h <= chainTip; {
+			end := h + 999
+			if end > chainTip {
+				end = chainTip
+			}
+			stopHash, err := rpc.getBlockHash(end)
+			if err != nil {
+				log.Printf("index: getblockhash(%d): %v", end, err)
+				return
+			}
+			select {
+			case jobCh <- batchJob{idx: idx, from: h, count: end - h + 1, stopHash: stopHash}:
+			case <-ctx.Done():
+				return
+			}
+			idx++
+			h = end + 1
 		}
-		count := batchEnd - from + 1
+	}()
 
-		stopHash, err := rpc.getBlockHash(batchEnd)
-		if err != nil {
-			return fmt.Errorf("getblockhash(%d): %w", batchEnd, err)
+	// Stage 2: worker pool — fetch batches in parallel.
+	var wg sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case job, ok := <-jobCh:
+					if !ok {
+						return
+					}
+					result := fetchOneBatch(peerAddr, magic, job)
+					select {
+					case resultCh <- result:
+					case <-ctx.Done():
+						return
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+	go func() { wg.Wait(); close(resultCh) }()
+
+	// Stage 3: ordered committer — buffer out-of-order results, flush in order.
+	pending := make(map[int]*batchFetch, numWorkers*2)
+	nextIdx := 0
+	written := 0
+
+	var prevFHdr []byte
+	if from == 0 {
+		prevFHdr = make([]byte, 32)
+	} else {
+		prevFHdr = db.getFilterHeader(from - 1)
+		if prevFHdr == nil {
+			return fmt.Errorf("missing filter header at height %d", from-1)
 		}
+	}
 
-		var fetchErr error
-		for attempt := 1; attempt <= 3; attempt++ {
-			fetchErr = fetchAndStoreBatch(db, peerAddr, magic, from, count, stopHash)
-			if fetchErr == nil {
+	for result := range resultCh {
+		if result.err != nil {
+			cancel()
+			for range resultCh {} // drain so workers can exit
+			return fmt.Errorf("batch at height %d: %w", result.job.from, result.err)
+		}
+		r := result
+		pending[r.job.idx] = &r
+
+		for {
+			b, ok := pending[nextIdx]
+			if !ok {
 				break
 			}
-			log.Printf("index: batch %d-%d error (attempt %d/3): %v", from, batchEnd, attempt, fetchErr)
-			if attempt < 3 {
-				time.Sleep(5 * time.Second)
+			if !bytes.Equal(b.prevFHdr, prevFHdr) {
+				cancel()
+				for range resultCh {}
+				return fmt.Errorf("filter header chain break before height %d", b.job.from)
 			}
-		}
-		if fetchErr != nil {
-			return fmt.Errorf("batch %d-%d: %w", from, batchEnd, fetchErr)
-		}
 
-		if batchEnd%50000 < 1000 || batchEnd == chainTip {
-			log.Printf("index: synced to %d/%d (%.1f%%)", batchEnd, chainTip,
-				float64(batchEnd)/float64(chainTip)*100)
+			entries := make([]filterEntry, len(b.blocks))
+			for i, blk := range b.blocks {
+				fHash := filterHashFromBytes(blk.filterBytes)
+				fHdr := deriveFilterHeader(fHash, prevFHdr)
+				entries[i] = filterEntry{
+					height:       b.job.from + i,
+					blockHashLE:  blk.blockHashLE,
+					filterBytes:  blk.filterBytes,
+					filterHeader: fHdr,
+				}
+				prevFHdr = fHdr
+			}
+
+			if err := db.putBatch(entries); err != nil {
+				cancel()
+				for range resultCh {}
+				return fmt.Errorf("db write batch %d: %w", nextIdx, err)
+			}
+
+			written++
+			lastH := entries[len(entries)-1].height
+			if written%50 == 0 || lastH == chainTip {
+				log.Printf("index: synced to %d/%d (%.1f%%)",
+					lastH, chainTip, float64(lastH)/float64(chainTip)*100)
+			}
+
+			delete(pending, nextIdx)
+			nextIdx++
 		}
-		from = batchEnd + 1
+	}
+
+	if written != totalBatches {
+		return fmt.Errorf("incomplete: wrote %d/%d batches", written, totalBatches)
 	}
 	log.Printf("index: sync complete at height %d", chainTip)
 	return nil
@@ -1424,11 +1537,11 @@ func buildIndex(db *filterDB, rpc *rpcClient, peerAddr string, magic [4]byte) er
 
 // indexLoop runs buildIndex once, then follows the chain tip by polling every
 // 60 seconds and indexing any new blocks that appear.
-func indexLoop(db *filterDB, rpc *rpcClient, peerAddr string, magic [4]byte) {
-	log.Printf("index: following tip (polling every 60s)")
+func indexLoop(db *filterDB, rpc *rpcClient, peerAddr string, magic [4]byte, numWorkers int) {
+	log.Printf("index: following tip (polling every 60s, %d workers)", numWorkers)
 	for {
 		time.Sleep(60 * time.Second)
-		if err := buildIndex(db, rpc, peerAddr, magic); err != nil {
+		if err := buildIndex(db, rpc, peerAddr, magic, numWorkers); err != nil {
 			log.Printf("index: tip sync error: %v", err)
 		}
 	}
@@ -1845,6 +1958,7 @@ func main() {
 		listenAddr = flag.String("listen", "",    "listen address for -serve mode (default: 0.0.0.0:<net-port>)")
 		indexMode  = flag.Bool("index",   false, "build/update local filter database from node via P2P, then follow tip")
 		dbPath     = flag.String("db",    "",    "path to local filter database (bbolt file; used by -index and -serve)")
+		workers    = flag.Int("workers",  4,     "number of parallel P2P connections for -index mode")
 	)
 	flag.Parse()
 	gcsDebug = *gcsdebugF
@@ -1957,10 +2071,10 @@ func main() {
 		defer db.close()
 		log.Printf("index: database %s (tip=%d)", *dbPath, db.tip())
 		waitForIBD(rpc)
-		if err := buildIndex(db, rpc, *peerAddr, magic); err != nil {
+		if err := buildIndex(db, rpc, *peerAddr, magic, *workers); err != nil {
 			log.Fatalf("index: build failed: %v", err)
 		}
-		indexLoop(db, rpc, *peerAddr, magic)
+		indexLoop(db, rpc, *peerAddr, magic, *workers)
 		return
 	}
 
