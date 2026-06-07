@@ -55,6 +55,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/btcsuite/btcd/btcutil/gcs"
@@ -969,6 +970,42 @@ func (d *filterDB) heightForHash(blockHashLE []byte) (int, bool) {
 	return h, h >= 0
 }
 
+// dbRef holds a hot-swappable read-only *filterDB so the serve loop can pick
+// up new blocks written by the indexer without restarting.  All handler
+// goroutines call get() at the start of each request; reload() swaps in a
+// fresh snapshot atomically under a write lock and closes the old one.
+type dbRef struct {
+	mu   sync.RWMutex
+	cur  *filterDB
+	path string
+}
+
+func newDBRef(db *filterDB, path string) *dbRef {
+	return &dbRef{cur: db, path: path}
+}
+
+func (r *dbRef) get() *filterDB {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.cur
+}
+
+func (r *dbRef) reload() {
+	fresh, err := openFilterDBReadOnly(r.path)
+	if err != nil {
+		log.Printf("db reload: %v", err)
+		return
+	}
+	r.mu.Lock()
+	old := r.cur
+	r.cur = fresh
+	r.mu.Unlock()
+	if old != nil {
+		old.close()
+	}
+	log.Printf("db reloaded (tip=%d)", fresh.tip())
+}
+
 // -- RPC client --------------------------------------------------------------
 
 type rpcClient struct {
@@ -1705,7 +1742,7 @@ func handleGetCFilters(conn net.Conn, magic [4]byte, rpc *rpcClient, db *filterD
 	return nil
 }
 
-func handlePeer(conn net.Conn, magic [4]byte, rpc *rpcClient, db *filterDB) {
+func handlePeer(conn net.Conn, magic [4]byte, rpc *rpcClient, dbr *dbRef) {
 	defer conn.Close()
 	addr := conn.RemoteAddr().String()
 	log.Printf("serve: peer connected: %s", addr)
@@ -1721,6 +1758,12 @@ func handlePeer(conn net.Conn, magic [4]byte, rpc *rpcClient, db *filterDB) {
 		if err != nil {
 			log.Printf("serve: %s: disconnected: %v", addr, err)
 			return
+		}
+		// Resolve current db snapshot once per request so each request is
+		// consistent even if a reload races with the handler.
+		var db *filterDB
+		if dbr != nil {
+			db = dbr.get()
 		}
 		switch cmd {
 		case cmdGetCFHdrs:
@@ -1748,23 +1791,35 @@ func handlePeer(conn net.Conn, magic [4]byte, rpc *rpcClient, db *filterDB) {
 	}
 }
 
-func serveLoop(listenAddr string, magic [4]byte, rpc *rpcClient, db *filterDB) {
+func serveLoop(listenAddr string, magic [4]byte, rpc *rpcClient, db *filterDB, dbPath string) {
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		log.Fatalf("serve: listen %s: %v", listenAddr, err)
 	}
+
+	var dbr *dbRef
 	if db != nil {
+		dbr = newDBRef(db, dbPath)
 		log.Printf("serve: listening on %s (standalone — local index, tip=%d)", listenAddr, db.tip())
+		// Reload the db snapshot every 60 seconds to pick up blocks written
+		// by a concurrently-running indexer.
+		go func() {
+			for {
+				time.Sleep(60 * time.Second)
+				dbr.reload()
+			}
+		}()
 	} else {
 		log.Printf("serve: listening on %s (proxy — RPC backend)", listenAddr)
 	}
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			log.Printf("serve: accept: %v", err)
 			continue
 		}
-		go handlePeer(conn, magic, rpc, db)
+		go handlePeer(conn, magic, rpc, dbr)
 	}
 }
 
@@ -1931,7 +1986,7 @@ func main() {
 		if *listenAddr == "" {
 			*listenAddr = "0.0.0.0:" + p2pPortByNet[*netName]
 		}
-		serveLoop(*listenAddr, magic, rpc, db)
+		serveLoop(*listenAddr, magic, rpc, db, *dbPath)
 		return
 	}
 
