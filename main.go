@@ -1390,12 +1390,16 @@ func fetchOneBatch(peerAddr string, magic [4]byte, job batchJob) batchFetch {
 	return out
 }
 
-// buildIndex syncs the local filter database from db.tip()+1 to the current
-// chain tip using numWorkers parallel P2P connections.  Resumable on restart.
-func buildIndex(db *filterDB, rpc *rpcClient, peerAddr string, magic [4]byte, numWorkers int) error {
+// buildIndex syncs the local filter database from db.tip()+1 up to maxHeight
+// (or the current chain tip when maxHeight==0) using numWorkers parallel P2P
+// connections.  Resumable on restart.
+func buildIndex(db *filterDB, rpc *rpcClient, peerAddr string, magic [4]byte, numWorkers, maxHeight int) error {
 	chainTip, err := rpc.getBlockCount()
 	if err != nil {
 		return fmt.Errorf("getblockcount: %w", err)
+	}
+	if maxHeight > 0 && maxHeight < chainTip {
+		chainTip = maxHeight
 	}
 	from := db.tip() + 1
 	if from > chainTip {
@@ -1541,7 +1545,7 @@ func indexLoop(db *filterDB, rpc *rpcClient, peerAddr string, magic [4]byte, num
 	log.Printf("index: following tip (polling every 60s, %d workers)", numWorkers)
 	for {
 		time.Sleep(60 * time.Second)
-		if err := buildIndex(db, rpc, peerAddr, magic, numWorkers); err != nil {
+		if err := buildIndex(db, rpc, peerAddr, magic, numWorkers, 0); err != nil {
 			log.Printf("index: tip sync error: %v", err)
 		}
 	}
@@ -1959,6 +1963,7 @@ func main() {
 		indexMode  = flag.Bool("index",   false, "build/update local filter database from node via P2P, then follow tip")
 		dbPath     = flag.String("db",    "",    "path to local filter database (bbolt file; used by -index and -serve)")
 		workers    = flag.Int("workers",  4,     "number of parallel P2P connections for -index mode")
+		forceIndex = flag.Bool("force",   false, "skip IBD wait; index up to current filter index tip (useful during testnet IBD)")
 	)
 	flag.Parse()
 	gcsDebug = *gcsdebugF
@@ -2070,11 +2075,23 @@ func main() {
 		}
 		defer db.close()
 		log.Printf("index: database %s (tip=%d)", *dbPath, db.tip())
-		waitForIBD(rpc)
-		if err := buildIndex(db, rpc, *peerAddr, magic, *workers); err != nil {
+		maxH := 0
+		if *forceIndex {
+			_, fh, err := rpc.getFilterIndexSynced()
+			if err != nil || fh <= 0 {
+				log.Fatalf("index: -force: cannot determine filter index tip: %v", err)
+			}
+			log.Printf("index: -force: skipping IBD wait, targeting filter index tip %d", fh)
+			maxH = fh
+		} else {
+			waitForIBD(rpc)
+		}
+		if err := buildIndex(db, rpc, *peerAddr, magic, *workers, maxH); err != nil {
 			log.Fatalf("index: build failed: %v", err)
 		}
-		indexLoop(db, rpc, *peerAddr, magic, *workers)
+		if !*forceIndex {
+			indexLoop(db, rpc, *peerAddr, magic, *workers)
+		}
 		return
 	}
 
