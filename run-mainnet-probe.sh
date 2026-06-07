@@ -32,7 +32,7 @@
 
 set -euo pipefail
 
-PROBE_DIR="$HOME/source/repos/godoge"
+PROBE_DIR="$HOME/source/repos/doge-cf-probe"
 DOGE_CLI="$HOME/source/repos/dogecoin/src/dogecoin-cli"
 
 # -- Config -------------------------------------------------------------------
