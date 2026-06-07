@@ -39,7 +39,9 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -53,13 +55,14 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"context"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/btcsuite/btcd/btcutil/gcs"
+	"github.com/syndtr/goleveldb/leveldb"
 	bbolt "go.etcd.io/bbolt"
 )
 
@@ -1005,6 +1008,252 @@ func (r *dbRef) reload() {
 		old.close()
 	}
 	log.Printf("db reloaded (tip=%d)", fresh.tip())
+}
+
+// -- Filter index backup / restore -------------------------------------------
+//
+// Backup format ("DGFI v1"):
+//   [0..3]  magic "DGFI"
+//   [4]     version 0x01
+//   [5..8]  tip height, uint32 LE
+//   Per block (height 0..tip):
+//     block_hash   (32 bytes LE)
+//     filter_hash  (32 bytes LE)  — dSHA256(filter_bytes)
+//     filter_header(32 bytes LE)
+//     compact_size(len) + filter_bytes
+//
+// Restore writes Dogecoin Core's native on-disk format:
+//   indexes/blockfilter/basic/db/        — LevelDB
+//   indexes/blockfilter/basic/fltrNNNNN.dat — flat filter files (16 MiB each)
+
+const (
+	dumpMagic         = "DGFI"
+	dumpVersion       = byte(1)
+	coreMaxFltrFile   = 0x1000000 // 16 MiB, matches Core's MAX_FLTR_FILE_SIZE
+	coreDumpBatchSize = 50000     // LevelDB batch flush interval
+)
+
+// writeBitcoinVarInt encodes n using Bitcoin Core's VARINT scheme (used in
+// CDiskBlockPos serialization — different from compact_size / protobuf varint).
+func writeBitcoinVarInt(buf *bytes.Buffer, n uint64) {
+	for n > 0x7F {
+		buf.WriteByte(byte((n & 0x7F) | 0x80))
+		n = (n >> 7) - 1
+	}
+	buf.WriteByte(byte(n & 0x7F))
+}
+
+// coreHeightKey returns the LevelDB height-index key ('t' || uint32 BE).
+func coreHeightKey(h int) []byte {
+	k := make([]byte, 5)
+	k[0] = 't'
+	binary.BigEndian.PutUint32(k[1:], uint32(h))
+	return k
+}
+
+// coreDBVal serialises a LevelDB value in Core's pair<uint256,DBVal> format:
+//   block_hash(32) + filter_hash(32) + filter_header(32) + VARINT(nFile) + VARINT(nPos)
+func coreDBVal(blockHash, filterHash, filterHeader []byte, nFile, nPos uint32) []byte {
+	var buf bytes.Buffer
+	buf.Write(blockHash)
+	buf.Write(filterHash)
+	buf.Write(filterHeader)
+	writeBitcoinVarInt(&buf, uint64(nFile))
+	writeBitcoinVarInt(&buf, uint64(nPos))
+	return buf.Bytes()
+}
+
+// dumpFilterIndex streams all filter data from db into a single portable file.
+func dumpFilterIndex(db *filterDB, outPath string) error {
+	tip := db.tip()
+	if tip < 0 {
+		return fmt.Errorf("database is empty")
+	}
+	f, err := os.Create(outPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	w := bufio.NewWriterSize(f, 4<<20)
+
+	// Header
+	w.WriteString(dumpMagic)
+	w.WriteByte(dumpVersion)
+	binary.Write(w, binary.LittleEndian, uint32(tip))
+
+	var lenBuf bytes.Buffer
+	for h := 0; h <= tip; h++ {
+		blockHash    := db.getBlockHashLE(h)
+		filterBytes  := db.getFilterBytes(h)
+		filterHeader := db.getFilterHeader(h)
+		if blockHash == nil || filterBytes == nil || filterHeader == nil {
+			return fmt.Errorf("missing entry at height %d", h)
+		}
+		filterHash := filterHashFromBytes(filterBytes)
+
+		w.Write(blockHash)
+		w.Write(filterHash)
+		w.Write(filterHeader)
+		lenBuf.Reset()
+		writeCompactSize(&lenBuf, uint64(len(filterBytes)))
+		w.Write(lenBuf.Bytes())
+		w.Write(filterBytes)
+
+		if h%100000 == 0 || h == tip {
+			log.Printf("dump: %d/%d (%.1f%%)", h, tip, float64(h)/float64(tip)*100)
+		}
+	}
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	log.Printf("dump: complete — %s", outPath)
+	return nil
+}
+
+// restoreFilterIndex reads a DGFI backup file and writes Dogecoin Core's
+// native block filter index (LevelDB + fltrNNNNN.dat) into coreDir.
+// Place the output at ~/.dogecoin/indexes/blockfilter/basic/ and start Core.
+func restoreFilterIndex(inPath, coreDir string) error {
+	f, err := os.Open(inPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	r := bufio.NewReaderSize(f, 4<<20)
+
+	// Verify header
+	magic := make([]byte, 4)
+	if _, err := io.ReadFull(r, magic); err != nil {
+		return fmt.Errorf("read magic: %w", err)
+	}
+	if string(magic) != dumpMagic {
+		return fmt.Errorf("not a DGFI file (got %x)", magic)
+	}
+	ver, err := r.ReadByte()
+	if err != nil {
+		return err
+	}
+	if ver != dumpVersion {
+		return fmt.Errorf("unsupported version %d", ver)
+	}
+	var tipU uint32
+	if err := binary.Read(r, binary.LittleEndian, &tipU); err != nil {
+		return err
+	}
+	tip := int(tipU)
+	log.Printf("restore: tip=%d, target=%s", tip, coreDir)
+
+	dbDir := filepath.Join(coreDir, "db")
+	if err := os.MkdirAll(dbDir, 0o700); err != nil {
+		return err
+	}
+
+	ldb, err := leveldb.OpenFile(dbDir, nil)
+	if err != nil {
+		return fmt.Errorf("leveldb open: %w", err)
+	}
+	defer ldb.Close()
+
+	var (
+		nFile   uint32
+		nPos    uint32
+		flat    *os.File
+		flatW   *bufio.Writer
+		batch   = new(leveldb.Batch)
+		bcount  int
+	)
+
+	openFlat := func(n uint32) error {
+		if flatW != nil {
+			if err := flatW.Flush(); err != nil {
+				return err
+			}
+		}
+		if flat != nil {
+			flat.Close()
+		}
+		name := filepath.Join(coreDir, fmt.Sprintf("fltr%05d.dat", n))
+		flat, err = os.Create(name)
+		if err != nil {
+			return err
+		}
+		flatW = bufio.NewWriterSize(flat, 4<<20)
+		return nil
+	}
+	if err := openFlat(0); err != nil {
+		return err
+	}
+
+	var lenBuf bytes.Buffer
+	blockHash    := make([]byte, 32)
+	filterHash   := make([]byte, 32)
+	filterHeader := make([]byte, 32)
+
+	for h := 0; h <= tip; h++ {
+		if _, err := io.ReadFull(r, blockHash);    err != nil { return fmt.Errorf("h=%d block_hash: %w",    h, err) }
+		if _, err := io.ReadFull(r, filterHash);   err != nil { return fmt.Errorf("h=%d filter_hash: %w",   h, err) }
+		if _, err := io.ReadFull(r, filterHeader); err != nil { return fmt.Errorf("h=%d filter_header: %w", h, err) }
+
+		filterLen, err := readCompactSize(r)
+		if err != nil {
+			return fmt.Errorf("h=%d filter_len: %w", h, err)
+		}
+		filterBytes := make([]byte, filterLen)
+		if _, err := io.ReadFull(r, filterBytes); err != nil {
+			return fmt.Errorf("h=%d filter_bytes: %w", h, err)
+		}
+
+		// Compute flat-file record size to decide whether to roll the file.
+		lenBuf.Reset()
+		writeCompactSize(&lenBuf, filterLen)
+		recordSize := uint32(32 + lenBuf.Len() + int(filterLen))
+
+		if nPos+recordSize > coreMaxFltrFile {
+			nFile++
+			nPos = 0
+			if err := openFlat(nFile); err != nil {
+				return err
+			}
+		}
+
+		// Write flat file record: block_hash || compact_size(len) || filter_bytes
+		flatW.Write(blockHash)
+		flatW.Write(lenBuf.Bytes())
+		flatW.Write(filterBytes)
+
+		// Accumulate LevelDB batch entry
+		batch.Put(coreHeightKey(h), coreDBVal(blockHash, filterHash, filterHeader, nFile, nPos))
+		nPos += recordSize
+		bcount++
+
+		if bcount >= coreDumpBatchSize || h == tip {
+			if err := ldb.Write(batch, nil); err != nil {
+				return fmt.Errorf("leveldb write batch at h=%d: %w", h, err)
+			}
+			batch.Reset()
+			bcount = 0
+		}
+
+		if h%100000 == 0 || h == tip {
+			log.Printf("restore: %d/%d (%.1f%%)", h, tip, float64(h)/float64(tip)*100)
+		}
+	}
+
+	// Write DB_FILTER_POS so Core knows where to append next
+	var posVal bytes.Buffer
+	writeBitcoinVarInt(&posVal, uint64(nFile))
+	writeBitcoinVarInt(&posVal, uint64(nPos))
+	if err := ldb.Put([]byte{'P'}, posVal.Bytes(), nil); err != nil {
+		return fmt.Errorf("write DB_FILTER_POS: %w", err)
+	}
+
+	if err := flatW.Flush(); err != nil {
+		return err
+	}
+	flat.Close()
+
+	log.Printf("restore: complete — %d flat files, LevelDB at %s", nFile+1, dbDir)
+	return nil
 }
 
 // -- RPC client --------------------------------------------------------------
@@ -1961,9 +2210,14 @@ func main() {
 		serverMode = flag.Bool("serve",   false, "serve BIP157/158 filters to incoming P2P peers")
 		listenAddr = flag.String("listen", "",    "listen address for -serve mode (default: 0.0.0.0:<net-port>)")
 		indexMode  = flag.Bool("index",   false, "build/update local filter database from node via P2P, then follow tip")
-		dbPath     = flag.String("db",    "",    "path to local filter database (bbolt file; used by -index and -serve)")
+		dbPath     = flag.String("db",    "",    "path to local filter database (bbolt file; used by -index, -serve, -dump)")
 		workers    = flag.Int("workers",  4,     "number of parallel P2P connections for -index mode")
 		forceIndex = flag.Bool("force",   false, "skip IBD wait; index up to current filter index tip (useful during testnet IBD)")
+		dumpMode   = flag.Bool("dump",    false, "dump filter index to a portable DGFI file (requires -db and -out)")
+		dumpOut    = flag.String("out",   "",    "output path for -dump mode")
+		restoreMode = flag.Bool("restore", false, "restore DGFI dump to Dogecoin Core's native index format (requires -in and -coredir)")
+		restoreIn  = flag.String("in",    "",    "input DGFI file for -restore mode")
+		coreDir    = flag.String("coredir", "", "target directory for -restore mode (e.g. ~/.dogecoin/indexes/blockfilter/basic)")
 	)
 	flag.Parse()
 	gcsDebug = *gcsdebugF
@@ -2060,6 +2314,39 @@ func main() {
 	}
 
 	rpc := &rpcClient{endpoint: *rpcURL, user: *rpcUser, pass: *rpcPass}
+
+	// -- Dump mode -------------------------------------------------------------
+	if *dumpMode {
+		if *dbPath == "" {
+			log.Fatalf("-dump requires -db <path>")
+		}
+		if *dumpOut == "" {
+			log.Fatalf("-dump requires -out <path>")
+		}
+		db, err := openFilterDBReadOnly(*dbPath)
+		if err != nil {
+			log.Fatalf("open db %s: %v", *dbPath, err)
+		}
+		defer db.close()
+		if err := dumpFilterIndex(db, *dumpOut); err != nil {
+			log.Fatalf("dump: %v", err)
+		}
+		return
+	}
+
+	// -- Restore mode ----------------------------------------------------------
+	if *restoreMode {
+		if *restoreIn == "" {
+			log.Fatalf("-restore requires -in <path>")
+		}
+		if *coreDir == "" {
+			log.Fatalf("-restore requires -coredir <path>")
+		}
+		if err := restoreFilterIndex(*restoreIn, *coreDir); err != nil {
+			log.Fatalf("restore: %v", err)
+		}
+		return
+	}
 
 	// -- Index mode ------------------------------------------------------------
 	if *indexMode {

@@ -2,12 +2,16 @@ module doge-cf-probe
 
 go 1.23
 
-require github.com/btcsuite/btcd/btcutil v1.1.5
+require (
+	github.com/btcsuite/btcd/btcutil v1.1.5
+	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
+)
 
 require (
 	github.com/aead/siphash v1.0.1 // indirect
 	github.com/btcsuite/btcd v0.23.5-0.20231215221805-96c9fd8078fd // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
+	github.com/golang/snappy v1.0.0 // indirect
 	github.com/kkdai/bstream v0.0.0-20161212061736-f391b8402d23 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9 // indirect

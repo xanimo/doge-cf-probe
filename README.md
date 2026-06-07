@@ -1,9 +1,9 @@
-# doge-cf-probe
+# godoge
 
-A raw P2P BIP157/158 probe and chain verification tool for Dogecoin nodes.
-Validates compact block filter implementation correctness across the full chain
-history, with optional cross-check against btcd's canonical GCS implementation
-(the same library used by neutrino/LND).
+A raw P2P BIP157/158 probe, local filter index, and chain verification tool for
+Dogecoin nodes. Validates compact block filter implementation correctness across
+the full chain history, with optional cross-check against btcd's canonical GCS
+implementation (the same library used by neutrino/LND).
 
 Written as a companion test harness for the Dogecoin Core BIP157/158 backport
 PR stack ([xanimo/dogecoin — backport/integration-stabilization](https://github.com/xanimo/dogecoin/tree/refs/heads/backport/integration-stabilization)).
@@ -57,7 +57,7 @@ backport and is handled transparently by the probe.
 ```bash
 git clone https://github.com/xanimo/godoge
 cd godoge
-go build -o doge-cf-probe .
+go build -o godoge .
 ```
 
 ## Quick start
@@ -78,7 +78,7 @@ go build -o doge-cf-probe .
   $(./src/dogecoin-cli -regtest getnewaddress)
 
 # Run basic probe
-./doge-cf-probe -net=regtest -rpcpass=test -start=1 -end=10
+./godoge -net=regtest -rpcpass=test -start=1 -end=10
 ```
 
 ### Mainnet
@@ -89,7 +89,7 @@ RPCPASS=$(grep rpcpassword ~/.dogecoin/dogecoin.conf | cut -d= -f2 | tr -d '[:sp
 RPCUSER=$(grep rpcuser     ~/.dogecoin/dogecoin.conf | cut -d= -f2 | tr -d '[:space:]')
 
 # Basic hash-chain verification of 1000 blocks
-./doge-cf-probe \
+./godoge \
   -net=mainnet \
   -rpcuser="$RPCUSER" \
   -rpcpass="$RPCPASS" \
@@ -97,7 +97,7 @@ RPCUSER=$(grep rpcuser     ~/.dogecoin/dogecoin.conf | cut -d= -f2 | tr -d '[:sp
   -end=501000
 
 # Full cross-check: hash chain + RPC verify + neutrino compatibility
-./doge-cf-probe \
+./godoge \
   -net=mainnet \
   -rpcuser="$RPCUSER" \
   -rpcpass="$RPCPASS" \
@@ -108,6 +108,8 @@ RPCUSER=$(grep rpcuser     ~/.dogecoin/dogecoin.conf | cut -d= -f2 | tr -d '[:sp
 ```
 
 ## Flags
+
+### Core
 
 | Flag          | Default                   | Description |
 |---------------|---------------------------|-------------|
@@ -126,6 +128,34 @@ RPCUSER=$(grep rpcuser     ~/.dogecoin/dogecoin.conf | cut -d= -f2 | tr -d '[:sp
 | `-neutrino`   | `false`                   | Cross-check our GCS decoder against btcd/btcutil/gcs |
 | `-gcsdebug`   | `false`                   | Print verbose GCS decoder internals |
 
+### Index mode (`-index`)
+
+| Flag        | Default | Description |
+|-------------|---------|-------------|
+| `-index`    | `false` | Build/update local filter database from node via P2P, then follow tip |
+| `-db`       | *(empty)* | Path to local filter database (bbolt file) |
+| `-workers`  | `4`     | Number of parallel P2P connections for faster IBD indexing |
+| `-force`    | `false` | Skip IBD wait; index up to current filter index tip (useful during testnet IBD) |
+
+### Serve mode (`-serve`)
+
+| Flag       | Default                   | Description |
+|------------|---------------------------|-------------|
+| `-serve`   | `false`                   | Serve BIP157/158 filters to incoming P2P peers |
+| `-listen`  | `0.0.0.0:<net-port>`      | Listen address for incoming peer connections |
+| `-db`      | *(empty)*                 | Path to local filter database; omit to proxy via RPC instead |
+
+### Dump / restore (`-dump`, `-restore`)
+
+| Flag        | Default   | Description |
+|-------------|-----------|-------------|
+| `-dump`     | `false`   | Dump filter index to a portable DGFI file |
+| `-db`       | *(empty)* | Source filter database for `-dump` |
+| `-out`      | *(empty)* | Output path for the DGFI dump file |
+| `-restore`  | `false`   | Restore a DGFI file to Dogecoin Core's native index format |
+| `-in`       | *(empty)* | Input DGFI file for `-restore` |
+| `-coredir`  | *(empty)* | Target directory for `-restore` (e.g. `~/.dogecoin/indexes/blockfilter/basic`) |
+
 ## Address matching
 
 The probe supports matching scriptPubKeys against filters to emulate light client
@@ -134,7 +164,7 @@ wallet scanning.
 ### P2PKH and P2SH addresses (via `-matchaddr`)
 
 ```bash
-./doge-cf-probe \
+./godoge \
   -net=mainnet \
   -rpcuser="$RPCUSER" \
   -rpcpass="$RPCPASS" \
@@ -157,7 +187,7 @@ raw scriptPubKey hex from `getblock` verbosity 2:
   jq -r '.tx[0].vout[0].scriptPubKey.hex'
 
 # Match it
-./doge-cf-probe \
+./godoge \
   -net=mainnet \
   -rpcuser="$RPCUSER" \
   -rpcpass="$RPCPASS" \
@@ -174,7 +204,110 @@ length limits:
 
 ```bash
 echo -e "76a914...\na914..." > targets.txt
-./doge-cf-probe -matchfile=targets.txt ...
+./godoge -matchfile=targets.txt ...
+```
+
+## Local filter index (`-index`)
+
+The `-index` mode builds a local copy of the BIP158 filter database from a
+Dogecoin node over P2P, then follows the chain tip. The database is a bbolt
+file and can be used standalone without a running node once built.
+
+```bash
+# Build index from scratch (waits for IBD to complete first)
+./godoge -index -db=/var/lib/godoge/filters.db -net=mainnet \
+  -rpcpass="$RPCPASS"
+
+# Faster indexing with more parallel P2P connections
+./godoge -index -db=filters.db -workers=8 -net=mainnet \
+  -rpcpass="$RPCPASS"
+
+# Force-index to current filter tip without waiting for full IBD
+# (useful during testnet initial sync)
+./godoge -index -db=filters.db -force -net=testnet \
+  -rpcpass="$RPCPASS"
+```
+
+During IBD the indexer opens N parallel P2P connections (`-workers`) and
+pipelines `getcfilters` requests across them. After IBD it switches to a single
+connection that follows the tip via `inv` messages.
+
+## Standalone filter server (`-serve`)
+
+The `-serve` mode listens for incoming P2P connections and answers `getcfheaders`
+and `getcfilters` requests. It can run in two ways:
+
+**Local index mode** — serves directly from a local database built with `-index`.
+No running Dogecoin node required after the index is built. The database is
+reloaded every 60 seconds so a concurrent indexer can keep it current.
+
+```bash
+./godoge -serve -db=filters.db -net=mainnet
+```
+
+**RPC proxy mode** — proxies filter requests to a Dogecoin node's RPC. Requires
+a running node with `-blockfilterindex=1`.
+
+```bash
+./godoge -serve -net=mainnet -rpcpass="$RPCPASS"
+```
+
+A custom listen address can be set with `-listen`:
+
+```bash
+./godoge -serve -db=filters.db -net=mainnet -listen=0.0.0.0:22556
+```
+
+## Filter index dump and restore (`-dump`, `-restore`)
+
+These modes let you export a local filter index to a single portable file and
+import it into Dogecoin Core's native on-disk format, allowing you to bootstrap
+a node's filter index without re-indexing from scratch.
+
+### Dump
+
+Exports the bbolt filter database to a binary DGFI (Dogecoin GCS Filter Index)
+file. The file contains all filter data (block hash, filter hash, filter header,
+and raw filter bytes) for every block from genesis to tip.
+
+```bash
+./godoge -dump -db=filters.db -out=filters_mainnet.dgfi
+```
+
+Progress is logged every 100 000 blocks.
+
+### Restore
+
+Reads a DGFI file and writes Dogecoin Core's native block filter index layout
+into a target directory:
+
+```
+<coredir>/db/              — LevelDB height index (block_hash, filter_hash, filter_header, file position)
+<coredir>/fltr00000.dat    — flat filter files, 16 MiB each
+<coredir>/fltr00001.dat
+...
+```
+
+Place the output directory at `~/.dogecoin/indexes/blockfilter/basic/` before
+starting Core and it will pick up the index without re-indexing.
+
+```bash
+./godoge -restore \
+  -in=filters_mainnet.dgfi \
+  -coredir=~/.dogecoin/indexes/blockfilter/basic
+```
+
+### DGFI file format (v1)
+
+```
+[0..3]  magic "DGFI"
+[4]     version 0x01
+[5..8]  tip height, uint32 LE
+Per block (height 0..tip):
+  block_hash    32 bytes LE
+  filter_hash   32 bytes  (dSHA256 of filter bytes)
+  filter_header 32 bytes
+  compact_size(len) + filter_bytes
 ```
 
 ## Chain verification (run-mainnet-probe.sh)
